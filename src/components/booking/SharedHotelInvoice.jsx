@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams } from 'react-router-dom';
-import ashokaLogo from '../../assets/tulsi-resort-logo.png';
+import ashokaLogo from '../../assets/Tulsi Resort logo.png';
 import { RiPhoneFill, RiMailFill } from 'react-icons/ri';
 import axios from 'axios';
 
@@ -126,8 +126,8 @@ export default function SharedHotelInvoice() {
               </div>
               <div className="text-xs text-center sm:text-left">
                 <p className="font-bold text-sm sm:text-base">TULSI RESORT</p>
-                <p className="text-xs">In Front Of Indian Oil Petrol Pump, Little Flower School Khorabar,</p>
-                <p className="text-xs">Deoria By Pass Road, Khorabar, Gorakhpur-273010, Uttar Pradesh</p>
+                <p className="text-xs">Deoria Bypass Rd, near LIC Office Gorakhpur</p>
+                <p className="text-xs">Taramandal, Gorakhpur, Uttar Pradesh 273016</p>
                 <p className="text-xs">Website: <a href="http://tulsiresort.com" className="text-blue-600">tulsiresort.com</a></p>
                 <p className="text-xs">contact@tulsiresort.in</p>
               </div>

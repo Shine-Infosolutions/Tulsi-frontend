@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useLocation } from 'react-router-dom';
-import ashokaLogo from '../../assets/tulsi-resort-logo.png';
+import ashokaLogo from '../../assets/Tulsi Resort logo.png';
 import { RiPhoneFill, RiMailFill } from 'react-icons/ri';
 import { FaWhatsapp, FaFilePdf } from 'react-icons/fa';
 import { useAppContext } from '../../context/AppContext';
@@ -218,9 +218,17 @@ export default function Invoice() {
 
   // Fetch invoice data from checkout API or use restaurant order data
   const fetchInvoiceData = async (checkoutId) => {
-    // Load current GST rates
-    const savedRates = localStorage.getItem('defaultGstRates');
-    const currentGstRates = savedRates ? JSON.parse(savedRates) : { cgstRate: 2.5, sgstRate: 2.5 };
+    // Load GST rates from booking data first, then fallback to saved rates
+    let currentGstRates = { cgstRate: 0, sgstRate: 0 }; // Default to 0
+    if (bookingData?.cgstRate !== undefined && bookingData?.sgstRate !== undefined) {
+      currentGstRates = {
+        cgstRate: bookingData.cgstRate * 100, // Convert from decimal to percentage
+        sgstRate: bookingData.sgstRate * 100
+      };
+    } else {
+      const savedRates = localStorage.getItem('defaultGstRates');
+      currentGstRates = savedRates ? JSON.parse(savedRates) : { cgstRate: 0, sgstRate: 0 };
+    }
     setGstRates(currentGstRates);
     try {
       setLoading(true);
@@ -1547,8 +1555,8 @@ export default function Invoice() {
                 </div>
                 <div className="text-xs text-center sm:text-left">
                   <p className="font-bold text-sm sm:text-base">TULSI RESORT </p>
-                  <p className="text-xs">In Front Of Indian Oil Petrol Pump, Little Flower School Khorabar,</p>
-                  <p className="text-xs">Deoria By Pass Road, Khorabar, Gorakhpur-273010, Uttar Pradesh</p>
+                  <p className="text-xs">Deoria Bypass Rd, near LIC Office Gorakhpur</p>
+                  <p className="text-xs">Taramandal, Gorakhpur, Uttar Pradesh 273016</p>
                   <p className="text-xs">Website: <a href="https://tulsiresort.com" className="text-blue-600">tulsiresort.com</a></p>
                   <p className="text-xs">contact@tulsiresort.in</p>
                   <p className="text-xs font-semibold">GSTIN: 09ACIFA2416J1ZF</p>

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, lazy, Suspense } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Home, Bed, AlertTriangle, Clock, CalendarCheck, DoorOpen, DollarSign, Users, TrendingUp, ChevronRight, Loader2, User, Package, MapPin, ChefHat, RefreshCw } from 'lucide-react';
 import DashboardLoader from '../DashboardLoader';
@@ -71,6 +71,10 @@ if (typeof document !== 'undefined') {
   document.head.appendChild(styleSheet);
 }
 
+
+
+
+
 // --- Utility: Fetch with Exponential Backoff ---
 // This robust function ensures stability by retrying API calls if they fail.
 const fetchWithRetry = async (url, retries = 3) => {
@@ -88,32 +92,22 @@ const fetchWithRetry = async (url, retries = 3) => {
             });
 
             if (!response.ok) {
-                // For 404 errors on optional endpoints, return empty array instead of throwing
                 if (response.status === 404 && (url.includes('/pantry/') || url.includes('/restaurant-orders/'))) {
-                    console.warn(`Endpoint ${url} not found (404), returning empty array`);
                     return [];
                 }
-                // For 401 errors on bookings endpoint, return empty array to allow dashboard to load
                 if (response.status === 401 && url.includes('/bookings/')) {
-                    console.warn(`Authentication required for ${url}, returning empty array`);
                     return [];
                 }
-                // Throw an error to trigger the catch block and retry
                 throw new Error(`HTTP error! status: ${response.status}`);
             }
 
             return await response.json();
         } catch (error) {
-            console.error(`Attempt ${i + 1} failed for ${url}:`, error.message);
             if (i < retries - 1) {
-                // Exponential backoff: 1s, 2s, 4s delay
                 const delay = Math.pow(2, i) * 1000;
                 await new Promise(resolve => setTimeout(resolve, delay));
             } else {
-                console.error(`Failed to fetch data from ${url} after ${retries} attempts.`);
-                // For optional endpoints and bookings, return empty array instead of throwing
                 if (url.includes('/pantry/') || url.includes('/restaurant-orders/') || url.includes('/bookings/')) {
-                    console.warn(`Endpoint ${url} failed, returning empty array`);
                     return [];
                 }
                 throw new Error(`Failed to fetch data: ${error.message}`);
@@ -291,26 +285,31 @@ const EasyDashboard = () => {
             setError(null);
             
             try {
-                // Fetch all data concurrently
-                const [roomsData, bookingsData, categoriesData, laundryData, pantryData, foodOrdersData] = await Promise.all([
+                // Fetch core data first
+                const [roomsData, bookingsData, categoriesData] = await Promise.all([
                     fetchWithRetry(`${BACKEND_URL}/api/rooms/all`),
                     fetchWithRetry(`${BACKEND_URL}/api/bookings/all`),
-                    fetchWithRetry(`${BACKEND_URL}/api/categories/all`),
-                    fetchWithRetry(`${BACKEND_URL}/api/laundry/all`).catch(() => []),
-                    fetchWithRetry(`${BACKEND_URL}/api/pantry/orders`).catch(() => []),
-                    fetchWithRetry(`${BACKEND_URL}/api/restaurant-orders/all`).catch(() => [])
+                    fetchWithRetry(`${BACKEND_URL}/api/categories/all`)
                 ]);
 
-                // Filter out non-array responses
                 setRooms(Array.isArray(roomsData) ? roomsData : []);
                 setBookings(Array.isArray(bookingsData) ? bookingsData : []);
                 setCategories(Array.isArray(categoriesData) ? categoriesData : []);
-                setLaundryData(Array.isArray(laundryData) ? laundryData : laundryData?.data || []);
-                setPantryOrders(Array.isArray(pantryData) ? pantryData : pantryData?.data || []);
-                setFoodOrders(Array.isArray(foodOrdersData) ? foodOrdersData : []);
+
+                // Fetch optional data separately to avoid blocking
+                try {
+                    const laundryData = await fetchWithRetry(`${BACKEND_URL}/api/laundry/all`);
+                    setLaundryData(Array.isArray(laundryData) ? laundryData : laundryData?.data || []);
+                } catch { setLaundryData([]); }
+
+                try {
+                    const foodOrdersData = await fetchWithRetry(`${BACKEND_URL}/api/restaurant-orders/all`);
+                    setFoodOrders(Array.isArray(foodOrdersData) ? foodOrdersData : []);
+                } catch { setFoodOrders([]); }
+
+                setPantryOrders([]); // Skip pantry orders as endpoint doesn't exist
 
             } catch (err) {
-                console.error("Data loading error:", err);
                 setError("Failed to load dashboard data. Please check the backend connection.");
             } finally {
                 setIsLoading(false);
@@ -318,7 +317,7 @@ const EasyDashboard = () => {
         };
 
         fetchAllData();
-    }, []); // Run once on component mount
+    }, []);
 
     
     // --- Utility Functions (Refactored to be safe with async data) ---
@@ -422,10 +421,7 @@ const EasyDashboard = () => {
 
     // Get laundry data for a specific room/guest
     const getGuestLaundry = useCallback((roomNumber, guestName) => {
-        console.log(`Looking for laundry for room ${roomNumber}, guest: ${guestName}`);
-        
-        const matchingLaundry = laundryData.filter(laundry => {
-            // Check room number match (multiple field variations)
+        return laundryData.filter(laundry => {
             const roomMatch = laundry.roomNumber === roomNumber || 
                              laundry.roomNumber === roomNumber.toString() ||
                              laundry.room_number === roomNumber ||
@@ -433,25 +429,17 @@ const EasyDashboard = () => {
                              laundry.roomNo === roomNumber ||
                              laundry.roomNo === roomNumber.toString();
             
-            // Check guest name match (case insensitive)
             const nameMatch = guestName && laundry.guestName && 
                              (laundry.guestName.toLowerCase().includes(guestName.toLowerCase()) ||
                               guestName.toLowerCase().includes(laundry.guestName.toLowerCase()));
             
             return roomMatch || nameMatch;
         });
-        
-        console.log(`Found ${matchingLaundry.length} matching laundry services:`, matchingLaundry);
-        return matchingLaundry;
     }, [laundryData]);
 
     // Get food orders for a specific room/guest
     const getGuestFoodOrders = useCallback((roomNumber, guestName) => {
-        console.log(`Looking for food orders for room ${roomNumber}, guest: ${guestName}`);
-        console.log('Available food orders:', foodOrders);
-        
-        const matchingOrders = foodOrders.filter(order => {
-            // Check room number match (multiple field variations)
+        return foodOrders.filter(order => {
             const roomMatch = order.roomNumber === roomNumber || 
                              order.roomNumber === roomNumber.toString() ||
                              order.room_number === roomNumber ||
@@ -461,7 +449,6 @@ const EasyDashboard = () => {
                              order.tableNo === roomNumber ||
                              order.tableNo === roomNumber.toString();
             
-            // Check guest name match (case insensitive)
             const nameMatch = guestName && (
                 (order.guestName && (order.guestName.toLowerCase().includes(guestName.toLowerCase()) ||
                  guestName.toLowerCase().includes(order.guestName.toLowerCase()))) ||
@@ -469,13 +456,8 @@ const EasyDashboard = () => {
                  guestName.toLowerCase().includes(order.customerName.toLowerCase())))
             );
             
-            console.log(`Order ${order._id}: roomMatch=${roomMatch}, nameMatch=${nameMatch}`, order);
-            
             return roomMatch || nameMatch;
         });
-        
-        console.log(`Found ${matchingOrders.length} matching orders:`, matchingOrders);
-        return matchingOrders;
     }, [foodOrders]);
 
     // Calculate stay duration
@@ -489,18 +471,7 @@ const EasyDashboard = () => {
     }, []);
     // -----------------------------------------------------------------
 
-    // Debug: Console log all data
-    console.log('All rooms data:', rooms);
-    console.log('All bookings data:', bookings);
-    console.log('All laundry data:', laundryData);
-    console.log('All pantry orders:', pantryOrders);
-    
-    // Console log all rooms with their calculated status
-    rooms.forEach(room => {
-        const status = getRoomStatus(room);
-        const booking = getRoomBooking(room.room_number);
-        console.log(`Room ${room.room_number}: Status = ${status}, Booking = `, booking);
-    });
+
     
     const roomStats = getRoomStats();
     const roomsByFloor = getRoomsByFloor();
@@ -545,12 +516,12 @@ const EasyDashboard = () => {
                     <span className="hidden sm:inline">HOSPITALITY MANAGEMENT</span>
                     <span className="sm:hidden">DASHBOARD</span>
                 </h1>
-
             </div>
 
 
 
             {/* Floor-wise Room Display - Elegant White Panel */}
+            <Suspense fallback={<div className="flex justify-center p-8"><Loader2 className="animate-spin" size={24} /></div>}>
             <div className="bg-white rounded-xl sm:rounded-2xl shadow-2xl p-4 sm:p-6 lg:p-8 border animate-scaleIn animate-delay-200" style={{borderColor: 'var(--color-border)'}}>
                 <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 sm:mb-8 gap-4">
                     <h2 className="text-xl sm:text-2xl font-light tracking-wider" style={{color: 'var(--color-text)'}}>Rooms Details</h2>
@@ -607,15 +578,11 @@ const EasyDashboard = () => {
                                             `}
                                             style={{ animationDelay: `${Math.min((parseInt(room.room_number) % 10) * 50 + 400, 600)}ms` }}
                                             onClick={() => {
-                                                console.log('🔥 ROOM CLICKED:', room.room_number, 'Status:', currentStatus);
-                                                
                                                 if (isBooked && booking) {
-                                                    console.log('🚀 Navigating to room service');
                                                     const roomData = { ...room, booking };
                                                     localStorage.setItem('selectedRoomService', JSON.stringify(roomData));
                                                     window.location.href = '/room-service';
                                                 } else if (currentStatus === 'available') {
-                                                    console.log('📝 Navigating to booking form');
                                                     const roomData = { 
                                                         roomNumber: room.room_number, 
                                                         category: getRoomCategory(room), 
@@ -661,6 +628,7 @@ const EasyDashboard = () => {
                     </div>
                 )}
             </div>
+            </Suspense>
             
             {/* Guest Details Modal */}
             {showGuestDetails && selectedRoom && (() => {
@@ -670,8 +638,8 @@ const EasyDashboard = () => {
                 const stayDuration = calculateStayDuration(booking?.checkInDate, booking?.checkOutDate);
                 
                 return (
-                    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 backdrop-blur-sm p-2 sm:p-4 animate-fadeInUp">
-                        <div className="bg-white rounded-xl shadow-xl w-full max-w-xs sm:max-w-4xl lg:max-w-6xl max-h-[95vh] sm:max-h-[90vh] overflow-hidden animate-scaleIn">
+                    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 backdrop-blur-sm p-2 sm:p-4">
+                        <div className="bg-white rounded-xl shadow-xl w-full max-w-xs sm:max-w-4xl lg:max-w-6xl max-h-[95vh] sm:max-h-[90vh] overflow-hidden">
                             <div className="p-4 sm:p-6 border-b border-gray-200 flex justify-between items-center">
                                 <h3 className="text-lg sm:text-xl lg:text-2xl font-semibold text-gray-800">
                                     Room {selectedRoom.room_number} - Guest Details
@@ -688,7 +656,7 @@ const EasyDashboard = () => {
                             <div className="p-4 sm:p-6 overflow-y-auto" style={{ maxHeight: "calc(95vh - 80px)" }}>
                                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
                                     {/* Guest Information */}
-                                    <div className="space-y-4 animate-slideInLeft animate-delay-100">
+                                    <div className="space-y-4">
                                         <h4 className="text-base sm:text-lg font-semibold text-gray-800 border-b pb-2 flex items-center">
                                             <User className="mr-2" size={18} /> Guest Information
                                         </h4>
@@ -704,7 +672,7 @@ const EasyDashboard = () => {
                                     </div>
                                     
                                     {/* Stay Information */}
-                                    <div className="space-y-4 animate-slideInLeft animate-delay-200">
+                                    <div className="space-y-4">
                                         <h4 className="text-base sm:text-lg font-semibold text-gray-800 border-b pb-2 flex items-center">
                                             <Clock className="mr-2" size={18} /> Stay Details
                                         </h4>
@@ -720,7 +688,7 @@ const EasyDashboard = () => {
                                     </div>
                                     
                                     {/* Food Orders */}
-                                    <div className="space-y-4 animate-slideInLeft animate-delay-300">
+                                    <div className="space-y-4">
                                         <h4 className="text-base sm:text-lg font-semibold text-gray-800 border-b pb-2 flex items-center">
                                             <Package className="mr-2" size={18} /> Food Orders ({guestFoodOrders.length})
                                         </h4>
@@ -749,7 +717,7 @@ const EasyDashboard = () => {
                                 </div>
                                 
                                 {/* Laundry Services - Full Width */}
-                                <div className="mt-4 sm:mt-6 space-y-4 animate-fadeInUp animate-delay-400">
+                                <div className="mt-4 sm:mt-6 space-y-4">
                                     <h4 className="text-base sm:text-lg font-semibold text-gray-800 border-b pb-2 flex items-center">
                                         <MapPin className="mr-2" size={18} /> Laundry Services ({guestLaundry.length})
                                     </h4>

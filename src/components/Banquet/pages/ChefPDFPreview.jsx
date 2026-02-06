@@ -1,7 +1,7 @@
 import React, { useState, useRef } from 'react';
 import axios from 'axios';
 import { useReactToPrint } from "react-to-print";
-import Logo from "../../../assets/tulsi-resort-logo.png";
+import Logo from "../../../assets/Tulsi Resort logo.png";
 
 const ChefPDFPreview = ({ booking, className }) => {
   const [showPreview, setShowPreview] = useState(false);

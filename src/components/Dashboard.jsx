@@ -1,4 +1,4 @@
-import React, { useState, useEffect, Fragment, useMemo, useCallback, useRef } from "react";
+import React, { useState, useEffect, Fragment, useMemo, useCallback, useRef, memo } from "react";
 import { FaIndianRupeeSign } from "react-icons/fa6";
 import { SlCalender } from "react-icons/sl";
 import {
@@ -20,9 +20,11 @@ import { useNavigate } from "react-router-dom";
 
 // Lazy load heavy components
 const BookingCalendar = React.lazy(() => import("./BookingCalendar"));
+const DashboardLoader = React.lazy(() => import("./DashboardLoader"));
 
-
-import DashboardLoader from "./DashboardLoader";
+// Cache for API responses
+const apiCache = new Map();
+const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
 
 // Add CSS animations
 const styles = `
@@ -209,23 +211,29 @@ const Dashboard = () => {
   const [selectedYear, setSelectedYear] = useState(2025);
 
   const fetchRooms = async () => {
-    try {
-      const { data } = await axios.get("/api/rooms/all", {
-        headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
-      });
-      const roomsData = Array.isArray(data) ? data : (data.rooms || data.data || []);
-      setRooms(roomsData);
-    } catch (error) {
-      console.log('Rooms API Error:', error);
-      setRooms([]);
-    }
+    // Rooms data now comes from dashboard stats - no separate API call needed
+    return;
   };
 
-  const fetchDashboardStats = async (filter = 'today', startDate = null, endDate = null) => {
+  const fetchDashboardStats = useCallback(async (filter = 'today', startDate = null, endDate = null) => {
     try {
       let url = `/api/dashboard/stats?filter=${filter}`;
       if (filter === 'range' && startDate && endDate) {
         url += `&startDate=${startDate}&endDate=${endDate}`;
+      }
+      
+      // Check cache first
+      const cacheKey = `dashboard-${url}`;
+      const cached = apiCache.get(cacheKey);
+      if (cached && Date.now() - cached.timestamp < CACHE_DURATION) {
+        setDashboardStats(cached.data.stats);
+        if (cached.data.rooms) {
+          setRooms(Array.isArray(cached.data.rooms) ? cached.data.rooms : []);
+        }
+        if (cached.data.bookings) {
+          setBookings(Array.isArray(cached.data.bookings) ? cached.data.bookings : []);
+        }
+        return;
       }
       
       const { data } = await axios.get(url, {
@@ -233,25 +241,26 @@ const Dashboard = () => {
       });
       
       if (data.success) {
+        // Cache the response
+        apiCache.set(cacheKey, { data, timestamp: Date.now() });
+        
         setDashboardStats(data.stats);
+        if (data.rooms) {
+          setRooms(Array.isArray(data.rooms) ? data.rooms : []);
+        }
+        if (data.bookings) {
+          setBookings(Array.isArray(data.bookings) ? data.bookings : []);
+        }
       }
     } catch (error) {
       console.log('Dashboard Stats API Error:', error);
       setDashboardStats(null);
     }
-  };
+  }, [axios]);
 
   const fetchBookings = async () => {
-    try {
-      const { data } = await axios.get("/api/bookings/all", {
-        headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
-      });
-      const bookingsData = Array.isArray(data) ? data : data.bookings || [];
-      setBookings(bookingsData);
-    } catch (error) {
-      console.log('Bookings API Error:', error);
-      setBookings([]);
-    }
+    // Bookings now come from dashboard stats - no separate API call needed
+    return;
   };
 
 
@@ -264,13 +273,23 @@ const Dashboard = () => {
     
     try {
       let data = [];
+      const cacheKey = `service-${service}`;
+      const cached = apiCache.get(cacheKey);
+      
+      if (cached && Date.now() - cached.timestamp < CACHE_DURATION) {
+        setAllServiceData(prev => ({ ...prev, [service]: cached.data }));
+        return;
+      }
+      
       if (service === 'restaurant') {
         const res = await axios.get("/api/restaurant-orders/all", { headers });
         data = Array.isArray(res.data) ? res.data : res.data?.restaurant || [];
+        apiCache.set(cacheKey, { data, timestamp: Date.now() });
         setAllServiceData(prev => ({ ...prev, restaurant: data }));
       } else if (service === 'laundry') {
         const res = await axios.get("/api/laundry/all", { headers });
         data = Array.isArray(res.data) ? res.data : res.data?.laundry || [];
+        apiCache.set(cacheKey, { data, timestamp: Date.now() });
         setAllServiceData(prev => ({ ...prev, laundry: data }));
       }
     } catch (error) {
@@ -314,11 +333,55 @@ const Dashboard = () => {
   const dashboardCards = useMemo(() => {
     const { revenueTrend, bookingsTrend } = calculateTrends;
     
+    // Calculate dynamic trends based on current timeFrame
+    const getFilteredData = () => {
+      const now = new Date();
+      return bookings.filter(booking => {
+        const bookingDate = new Date(booking.createdAt);
+        switch (timeFrame) {
+          case 'today':
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+            const tomorrow = new Date(today);
+            tomorrow.setDate(tomorrow.getDate() + 1);
+            return bookingDate >= today && bookingDate < tomorrow;
+          case 'weekly':
+            const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+            return bookingDate >= weekAgo;
+          case 'monthly':
+            return bookingDate.getMonth() === now.getMonth() && bookingDate.getFullYear() === now.getFullYear();
+          case 'range':
+            if (startDate && endDate) {
+              const start = new Date(startDate);
+              start.setHours(0, 0, 0, 0);
+              const end = new Date(endDate);
+              end.setHours(23, 59, 59, 999);
+              return bookingDate >= start && bookingDate <= end;
+            }
+            return true;
+          default:
+            return true;
+        }
+      });
+    };
+    
+    const filteredBookings = getFilteredData();
+    const activeCount = filteredBookings.filter(b => b.status === 'Checked In').length;
+    const cancelledCount = filteredBookings.filter(b => b.status === 'Cancelled').length;
+    const onlineCount = filteredBookings.filter(b => 
+      b.paymentMode === 'UPI' || 
+      (b.advancePayments && b.advancePayments.some(ap => ap.paymentMode && (ap.paymentMode.toLowerCase().includes('upi') || ap.paymentMode.toLowerCase().includes('online') || ap.paymentMode.toLowerCase().includes('card'))))
+    ).length;
+    const cashCount = filteredBookings.filter(b => 
+      b.paymentMode === 'Cash' || 
+      (b.advancePayments && b.advancePayments.some(ap => ap.paymentMode && ap.paymentMode.toLowerCase().includes('cash')))
+    ).length;
+    
     return [
       {
         id: "bookings",
         title: "Total Bookings",
-        value: dashboardStats?.totalBookings?.toString() || bookings.length.toString(),
+        value: dashboardStats?.totalBookings?.toString() || filteredBookings.length.toString(),
         icon: "Calendar",
         color: "bg-primary",
         trend: `${bookingsTrend >= 0 ? '+' : ''}${bookingsTrend.toFixed(1)}%`,
@@ -327,7 +390,7 @@ const Dashboard = () => {
       {
         id: "active",
         title: "Active Bookings",
-        value: dashboardStats?.activeBookings?.toString() || "0",
+        value: dashboardStats?.activeBookings?.toString() || activeCount.toString(),
         icon: "CheckCircle",
         color: "bg-green-500",
         trend: "+0%",
@@ -336,7 +399,7 @@ const Dashboard = () => {
       {
         id: "cancelled",
         title: "Cancelled Bookings",
-        value: dashboardStats?.cancelledBookings?.toString() || "0",
+        value: dashboardStats?.cancelledBookings?.toString() || cancelledCount.toString(),
         icon: "AlertTriangle",
         color: "bg-red-500",
         trend: "+0%",
@@ -354,7 +417,7 @@ const Dashboard = () => {
       {
         id: "online",
         title: "Online Payments",
-        value: dashboardStats?.payments?.upi?.toString() || "0",
+        value: dashboardStats?.payments?.upi?.toString() || onlineCount.toString(),
         icon: "FaIndianRupeeSign",
         color: "bg-blue-600",
         trend: "+0%",
@@ -363,7 +426,7 @@ const Dashboard = () => {
       {
         id: "cash",
         title: "Cash Payments",
-        value: dashboardStats?.payments?.cash?.toString() || "0",
+        value: dashboardStats?.payments?.cash?.toString() || cashCount.toString(),
         icon: "FaIndianRupeeSign",
         color: "bg-green-600",
         trend: "+0%",
@@ -388,30 +451,21 @@ const Dashboard = () => {
         trendUp: true,
       },
     ];
-  }, [dashboardStats, bookings, allServiceData, calculateTrends]);
+  }, [dashboardStats, bookings, allServiceData, calculateTrends, timeFrame, startDate, endDate]);
 
   useEffect(() => {
     const fetchData = async () => {
       setLoading(true);
       try {
-        // Only fetch dashboard stats initially for fastest load
-        await fetchDashboardStats(timeFrame);
+        await fetchDashboardStats(timeFrame, startDate, endDate);
         setLoading(false);
-        
-        // Fetch other data in background after UI renders
-        setTimeout(async () => {
-          await Promise.all([
-            fetchRooms(),
-            fetchBookings()
-          ]);
-        }, 100);
       } catch (error) {
         console.error('Dashboard fetch error:', error);
         setLoading(false);
       }
     };
     fetchData();
-  }, [timeFrame]);
+  }, []); // Only run once on mount
 
   useEffect(() => {
     const timeoutId = setTimeout(() => {
@@ -423,47 +477,75 @@ const Dashboard = () => {
     }, 300); // Debounce API calls
     
     return () => clearTimeout(timeoutId);
-  }, [timeFrame, startDate, endDate]);
+  }, [timeFrame, startDate, endDate, fetchDashboardStats]);
 
 
 
   const roomCategories = useMemo(() => {
     const categories = {};
+    
     rooms.forEach(room => {
-      // Handle category as object or string
-      let category = 'Standard';
-      if (room.category) {
-        if (typeof room.category === 'string') {
-          category = room.category;
-        } else if (room.category.name) {
-          category = room.category.name;
-        } else if (room.category.type) {
-          category = room.category.type;
+      // Get category name from populated categoryId or fallback
+      let categoryName = 'Standard';
+      if (room.categoryId) {
+        if (typeof room.categoryId === 'object' && room.categoryId.name) {
+          categoryName = room.categoryId.name;
+        } else if (typeof room.categoryId === 'string') {
+          categoryName = room.categoryId;
         }
-      } else if (room.roomType) {
-        if (typeof room.roomType === 'string') {
-          category = room.roomType;
-        } else if (room.roomType.name) {
-          category = room.roomType.name;
+      } else if (room.category) {
+        if (typeof room.category === 'object' && room.category.name) {
+          categoryName = room.category.name;
+        } else if (typeof room.category === 'string') {
+          categoryName = room.category;
         }
       }
       
-      if (!categories[category]) {
-        categories[category] = {
+      if (!categories[categoryName]) {
+        categories[categoryName] = {
           total: 0,
           available: 0,
-          occupied: 0
+          booked: 0,
+          reserved: 0,
+          maintenance: 0,
+          rooms: []
         };
       }
-      categories[category].total++;
-      if (room.status === 'available') {
-        categories[category].available++;
+      
+      categories[categoryName].total++;
+      categories[categoryName].rooms.push({
+        number: room.room_number || room.roomNumber,
+        status: room.status,
+        price: room.price
+      });
+      
+      // Dynamic status calculation based on current bookings
+      const roomNumber = room.room_number || room.roomNumber;
+      const activeBooking = bookings.find(b => 
+        b.roomNumber === roomNumber && b.status === 'Checked In'
+      );
+      
+      if (activeBooking) {
+        categories[categoryName].booked++;
       } else {
-        categories[category].occupied++;
+        switch (room.status) {
+          case 'available':
+            categories[categoryName].available++;
+            break;
+          case 'reserved':
+            categories[categoryName].reserved++;
+            break;
+          case 'maintenance':
+            categories[categoryName].maintenance++;
+            break;
+          default:
+            categories[categoryName].available++;
+        }
       }
     });
+    
     return categories;
-  }, [rooms]);
+  }, [rooms, bookings]);
 
   const toggleCard = (cardId) => {
     const newActiveCard = activeCard === cardId ? null : cardId;
@@ -484,7 +566,7 @@ const Dashboard = () => {
     }
   };
 
-  const Pagination = ({ currentPage, totalItems, itemsPerPage, onPageChange }) => {
+  const Pagination = memo(({ currentPage, totalItems, itemsPerPage, onPageChange }) => {
     const totalPages = Math.ceil(totalItems / itemsPerPage);
     if (totalPages <= 1) return null;
 
@@ -514,7 +596,7 @@ const Dashboard = () => {
         </div>
       </div>
     );
-  };
+  });
 
 
 
@@ -974,7 +1056,11 @@ const Dashboard = () => {
   };
 
   if (loading) {
-    return <DashboardLoader />;
+    return (
+      <React.Suspense fallback={<div className="flex items-center justify-center h-screen">Loading...</div>}>
+        <DashboardLoader />
+      </React.Suspense>
+    );
   }
 
   return (
@@ -1053,11 +1139,21 @@ const Dashboard = () => {
         <div className="flex flex-col sm:flex-row flex-wrap gap-4 items-start sm:items-center">
           <div className="flex items-center">
             <CheckCircle className="w-5 h-5 text-green-500 mr-2" />
-            <span className="text-sm">{dashboardStats?.todayCheckIns || 0} Check-ins Today</span>
+            <span className="text-sm">{dashboardStats?.todayCheckIns || bookings.filter(b => {
+              const today = new Date();
+              today.setHours(0, 0, 0, 0);
+              const checkInDate = new Date(b.checkInDate);
+              return checkInDate >= today && checkInDate < new Date(today.getTime() + 24 * 60 * 60 * 1000) && b.status === 'Checked In';
+            }).length} Check-ins Today</span>
           </div>
           <div className="flex items-center">
             <Clock className="w-5 h-5 text-primary mr-2" />
-            <span className="text-sm">{dashboardStats?.todayCheckOuts || 0} Check-outs Today</span>
+            <span className="text-sm">{dashboardStats?.todayCheckOuts || bookings.filter(b => {
+              const today = new Date();
+              today.setHours(0, 0, 0, 0);
+              const checkOutDate = new Date(b.checkOutDate);
+              return checkOutDate >= today && checkOutDate < new Date(today.getTime() + 24 * 60 * 60 * 1000) && b.status === 'Checked Out';
+            }).length} Check-outs Today</span>
           </div>
           <div className="flex items-center">
             <AlertTriangle className="w-5 h-5 text-red-600 mr-2" />
@@ -1181,9 +1277,21 @@ const Dashboard = () => {
                       <span className="font-medium text-green-600">{data.available}</span>
                     </div>
                     <div className="flex justify-between text-sm">
-                      <span className="text-red-600">Occupied:</span>
-                      <span className="font-medium text-red-600">{data.occupied}</span>
+                      <span className="text-blue-600">Booked:</span>
+                      <span className="font-medium text-blue-600">{data.booked}</span>
                     </div>
+                    {data.reserved > 0 && (
+                      <div className="flex justify-between text-sm">
+                        <span className="text-yellow-600">Reserved:</span>
+                        <span className="font-medium text-yellow-600">{data.reserved}</span>
+                      </div>
+                    )}
+                    {data.maintenance > 0 && (
+                      <div className="flex justify-between text-sm">
+                        <span className="text-red-600">Maintenance:</span>
+                        <span className="font-medium text-red-600">{data.maintenance}</span>
+                      </div>
+                    )}
                   </div>
                   {data.available > 0 && (
                     <button 

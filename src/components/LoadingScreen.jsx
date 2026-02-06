@@ -1,5 +1,5 @@
 import React from 'react';
-import hotelLogo from '../assets/tulsi-resort-logo.png';
+import hotelLogo from '../assets/Tulsi Resort logo.png';
 
 const LoadingScreen = () => {
   return (

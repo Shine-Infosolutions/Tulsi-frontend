@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import tulsiLogo from '../assets/tulsi-resort-logo.png';
+import tulsiLogo from '../assets/Tulsi Resort logo.png';
 
 const Login = () => {
   const [credentials, setCredentials] = useState({ email: '', password: '' });

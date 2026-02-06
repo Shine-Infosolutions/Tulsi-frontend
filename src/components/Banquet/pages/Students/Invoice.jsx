@@ -2,7 +2,7 @@ import { useParams } from "react-router-dom";
 import { useEffect, useState, useRef } from "react";
 import axios from "axios";
 import { useReactToPrint } from "react-to-print";
-import Logo from "../../../../assets/tulsi-resort-logo.png";
+import Logo from "../../../../assets/Tulsi Resort logo.png";
 // import WaterMark from "../../../../assets/WaterMark.png";
 import { useNavigate } from "react-router-dom";
 

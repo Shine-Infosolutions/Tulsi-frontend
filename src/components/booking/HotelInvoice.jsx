@@ -897,16 +897,16 @@ export default function Invoice() {
                 </>
               )}
 
-              <p className="font-bold">CheckIn Date</p>
+              <p className="font-bold">CheckIn Date/Time</p>
               <p className="font-medium">: {(() => {
                 const checkInDate = bookingData?.checkInDate ? formatDate(bookingData.checkInDate) : (invoiceData.invoiceDetails?.checkInDate && invoiceData.invoiceDetails.checkInDate !== 'N/A' ? invoiceData.invoiceDetails.checkInDate : formatDate());
-                const checkInTime = bookingData?.actualCheckInTime ? new Date(bookingData.actualCheckInTime).toLocaleTimeString('en-US', { hour12: true, hour: '2-digit', minute: '2-digit' }) : (bookingData?.timeIn || '');
+                const checkInTime = invoiceData.invoiceDetails?.actualCheckInTime ? new Date(invoiceData.invoiceDetails.actualCheckInTime).toLocaleTimeString('en-US', { hour12: true, hour: '2-digit', minute: '2-digit' }) : (bookingData?.timeIn || '');
                 return `${checkInDate}${checkInTime ? ` ${checkInTime}` : ''}`;
               })()}</p>
-              <p className="font-bold">CheckOut Date</p>
+              <p className="font-bold">CheckOut Date/Time</p>
               <p className="font-medium">: {(() => {
                 const checkOutDate = bookingData?.checkOutDate ? formatDate(bookingData.checkOutDate) : (invoiceData.invoiceDetails?.checkOutDate && invoiceData.invoiceDetails.checkOutDate !== 'N/A' ? invoiceData.invoiceDetails.checkOutDate : formatDate());
-                const checkOutTime = bookingData?.actualCheckOutTime ? new Date(bookingData.actualCheckOutTime).toLocaleTimeString('en-US', { hour12: true, hour: '2-digit', minute: '2-digit' }) : (bookingData?.timeOut || '');
+                const checkOutTime = invoiceData.invoiceDetails?.actualCheckOutTime ? new Date(invoiceData.invoiceDetails.actualCheckOutTime).toLocaleTimeString('en-US', { hour12: true, hour: '2-digit', minute: '2-digit' }) : (bookingData?.timeOut || '');
                 return `${checkOutDate}${checkOutTime ? ` ${checkOutTime}` : ''}`;
               })()}</p>
               {bookingData?.planPackage && (
@@ -1555,11 +1555,11 @@ export default function Invoice() {
                 </div>
                 <div className="text-xs text-center sm:text-left">
                   <p className="font-bold text-sm sm:text-base">TULSI RESORT </p>
-                  <p className="text-xs">Deoria Bypass Rd, near LIC Office Gorakhpur</p>
-                  <p className="text-xs">Taramandal, Gorakhpur, Uttar Pradesh 273016</p>
+                  <p className="text-xs">In Front Of Indian Oil Petrol Pump, Little Flower School Khorabar,</p>
+                  <p className="text-xs">Deoria By Pass Road, Khorabar, Gorakhpur-273010, Uttar Pradesh</p>
                   <p className="text-xs">Website: <a href="https://tulsiresort.com" className="text-blue-600">tulsiresort.com</a></p>
                   <p className="text-xs">contact@tulsiresort.in</p>
-                  <p className="text-xs font-semibold">GSTIN: 09ACIFA2416J1ZF</p>
+                  {/* <p className="text-xs font-semibold">GSTIN: 09ACIFA2416J1ZF</p> */}
                 </div>
               </div>
               <div className="contact-info flex flex-col sm:flex-row items-center space-y-2 sm:space-y-0 sm:space-x-4">

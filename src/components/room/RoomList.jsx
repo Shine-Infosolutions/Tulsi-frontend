@@ -98,11 +98,9 @@ const RoomList = () => {
 
   useEffect(() => {
     const fetchData = async () => {
-      if (page === 1 && statusFilter === 'all' && !categoryFilter && !searchTerm) {
-        setIsInitialLoading(true);
-      }
       setLoading(true);
       await Promise.all([fetchRooms(), fetchCategories()]);
+      await new Promise(resolve => setTimeout(resolve, 500));
       setLoading(false);
       setIsInitialLoading(false);
     };
@@ -316,6 +314,10 @@ const RoomList = () => {
         return "bg-gray-100 text-gray-800";
     }
   };
+
+  if (isInitialLoading) {
+    return <DashboardLoader pageName="Room Management" />;
+  }
 
   return (
     <div className="p-4 sm:p-6 space-y-4 sm:space-y-6 min-h-screen overflow-y-auto bg-[#fff9e6]" style={{opacity: isInitialLoading ? 0 : 1, transition: 'opacity 0.3s ease-in-out'}}>

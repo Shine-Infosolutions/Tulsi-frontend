@@ -222,17 +222,10 @@ const Dashboard = () => {
         url += `&startDate=${startDate}&endDate=${endDate}`;
       }
       
-      // Check cache first
       const cacheKey = `dashboard-${url}`;
       const cached = apiCache.get(cacheKey);
       if (cached && Date.now() - cached.timestamp < CACHE_DURATION) {
         setDashboardStats(cached.data.stats);
-        if (cached.data.rooms) {
-          setRooms(Array.isArray(cached.data.rooms) ? cached.data.rooms : []);
-        }
-        if (cached.data.bookings) {
-          setBookings(Array.isArray(cached.data.bookings) ? cached.data.bookings : []);
-        }
         return;
       }
       
@@ -240,21 +233,35 @@ const Dashboard = () => {
         headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
       });
       
+      console.log('Dashboard API Response:', data);
+      
       if (data.success) {
-        // Cache the response
         apiCache.set(cacheKey, { data, timestamp: Date.now() });
-        
         setDashboardStats(data.stats);
-        if (data.rooms) {
-          setRooms(Array.isArray(data.rooms) ? data.rooms : []);
-        }
-        if (data.bookings) {
-          setBookings(Array.isArray(data.bookings) ? data.bookings : []);
-        }
+      } else {
+        console.log('API returned success: false');
       }
     } catch (error) {
       console.log('Dashboard Stats API Error:', error);
       setDashboardStats(null);
+    }
+  }, [axios]);
+
+  const fetchBookingsAndRooms = useCallback(async () => {
+    try {
+      const token = localStorage.getItem("token");
+      const headers = { Authorization: `Bearer ${token}` };
+      
+      const response = await axios.get("/api/bookings/all", { headers });
+      
+      if (response.data.bookings) {
+        setBookings(Array.isArray(response.data.bookings) ? response.data.bookings : []);
+        setRooms(Array.isArray(response.data.rooms) ? response.data.rooms : []);
+      } else {
+        setBookings(Array.isArray(response.data) ? response.data : []);
+      }
+    } catch (error) {
+      console.error('Fetch bookings/rooms error:', error);
     }
   }, [axios]);
 
@@ -284,11 +291,13 @@ const Dashboard = () => {
       if (service === 'restaurant') {
         const res = await axios.get("/api/restaurant-orders/all", { headers });
         data = Array.isArray(res.data) ? res.data : res.data?.restaurant || [];
+        console.log('Restaurant data:', data);
         apiCache.set(cacheKey, { data, timestamp: Date.now() });
         setAllServiceData(prev => ({ ...prev, restaurant: data }));
       } else if (service === 'laundry') {
         const res = await axios.get("/api/laundry/all", { headers });
         data = Array.isArray(res.data) ? res.data : res.data?.laundry || [];
+        console.log('Laundry data:', data);
         apiCache.set(cacheKey, { data, timestamp: Date.now() });
         setAllServiceData(prev => ({ ...prev, laundry: data }));
       }
@@ -368,14 +377,23 @@ const Dashboard = () => {
     const filteredBookings = getFilteredData();
     const activeCount = filteredBookings.filter(b => b.status === 'Checked In').length;
     const cancelledCount = filteredBookings.filter(b => b.status === 'Cancelled').length;
-    const onlineCount = filteredBookings.filter(b => 
-      b.paymentMode === 'UPI' || 
-      (b.advancePayments && b.advancePayments.some(ap => ap.paymentMode && (ap.paymentMode.toLowerCase().includes('upi') || ap.paymentMode.toLowerCase().includes('online') || ap.paymentMode.toLowerCase().includes('card'))))
-    ).length;
-    const cashCount = filteredBookings.filter(b => 
-      b.paymentMode === 'Cash' || 
-      (b.advancePayments && b.advancePayments.some(ap => ap.paymentMode && ap.paymentMode.toLowerCase().includes('cash')))
-    ).length;
+    
+    // Check both paymentMode and advancePayments for payment type
+    const onlineCount = filteredBookings.filter(b => {
+      const hasOnlinePaymentMode = b.paymentMode && (b.paymentMode === 'UPI' || b.paymentMode.toLowerCase().includes('online') || b.paymentMode.toLowerCase().includes('card'));
+      const hasOnlineAdvancePayment = b.advancePayments && b.advancePayments.some(ap => 
+        ap.paymentMode && (ap.paymentMode.toLowerCase().includes('upi') || ap.paymentMode.toLowerCase().includes('online') || ap.paymentMode.toLowerCase().includes('card'))
+      );
+      return hasOnlinePaymentMode || hasOnlineAdvancePayment;
+    }).length;
+    
+    const cashCount = filteredBookings.filter(b => {
+      const hasCashPaymentMode = b.paymentMode && b.paymentMode === 'Cash';
+      const hasCashAdvancePayment = b.advancePayments && b.advancePayments.some(ap => 
+        ap.paymentMode && ap.paymentMode.toLowerCase().includes('cash')
+      );
+      return hasCashPaymentMode || hasCashAdvancePayment;
+    }).length;
     
     return [
       {
@@ -417,7 +435,7 @@ const Dashboard = () => {
       {
         id: "online",
         title: "Online Payments",
-        value: dashboardStats?.payments?.upi?.toString() || onlineCount.toString(),
+        value: (dashboardStats?.payments?.upi || onlineCount).toString(),
         icon: "FaIndianRupeeSign",
         color: "bg-blue-600",
         trend: "+0%",
@@ -426,7 +444,7 @@ const Dashboard = () => {
       {
         id: "cash",
         title: "Cash Payments",
-        value: dashboardStats?.payments?.cash?.toString() || cashCount.toString(),
+        value: (dashboardStats?.payments?.cash || cashCount).toString(),
         icon: "FaIndianRupeeSign",
         color: "bg-green-600",
         trend: "+0%",
@@ -457,7 +475,15 @@ const Dashboard = () => {
     const fetchData = async () => {
       setLoading(true);
       try {
-        await fetchDashboardStats(timeFrame, startDate, endDate);
+        await Promise.all([
+          fetchDashboardStats(timeFrame, startDate, endDate),
+          fetchBookingsAndRooms()
+        ]);
+        if (activeCard === 'restaurant') {
+          await fetchServiceData('restaurant');
+        } else if (activeCard === 'laundry') {
+          await fetchServiceData('laundry');
+        }
         setLoading(false);
       } catch (error) {
         console.error('Dashboard fetch error:', error);
@@ -465,16 +491,27 @@ const Dashboard = () => {
       }
     };
     fetchData();
-  }, []); // Only run once on mount
+    
+    // Refresh data every 30 seconds
+    const interval = setInterval(() => {
+      fetchDashboardStats(timeFrame, startDate, endDate);
+      fetchBookingsAndRooms();
+    }, 30000);
+    
+    return () => clearInterval(interval);
+  }, []);
 
   useEffect(() => {
     const timeoutId = setTimeout(() => {
+      // Clear cache when filter changes
+      apiCache.clear();
+      
       if (timeFrame === 'range' && startDate && endDate) {
         fetchDashboardStats(timeFrame, startDate, endDate);
       } else if (timeFrame !== 'range') {
         fetchDashboardStats(timeFrame);
       }
-    }, 300); // Debounce API calls
+    }, 300);
     
     return () => clearTimeout(timeoutId);
   }, [timeFrame, startDate, endDate, fetchDashboardStats]);
@@ -556,9 +593,9 @@ const Dashboard = () => {
       localStorage.setItem("activeCard", newActiveCard);
       
       // Fetch specific service data only when needed
-      if (newActiveCard === 'restaurant' && !allServiceData.restaurant.length) {
+      if (newActiveCard === 'restaurant') {
         fetchServiceData('restaurant');
-      } else if (newActiveCard === 'laundry' && !allServiceData.laundry.length) {
+      } else if (newActiveCard === 'laundry') {
         fetchServiceData('laundry');
       }
     } else {

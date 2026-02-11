@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, lazy, Suspense } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Home, Bed, AlertTriangle, Clock, CalendarCheck, DoorOpen, DollarSign, Users, TrendingUp, ChevronRight, Loader2, User, Package, MapPin, ChefHat, RefreshCw } from 'lucide-react';
 import DashboardLoader from '../DashboardLoader';
+import { sessionCache } from '../../utils/sessionCache';
 
 // --- Configuration ---
 const BACKEND_URL = import.meta.env.VITE_API_BASE_URL;
@@ -285,6 +286,21 @@ const EasyDashboard = () => {
             setError(null);
             
             try {
+                // Check cache first
+                const cacheKey = 'ez-dashboard-all';
+                const cached = sessionCache.get(cacheKey);
+                
+                if (cached) {
+                    setRooms(cached.rooms || []);
+                    setBookings(cached.bookings || []);
+                    setCategories(cached.categories || []);
+                    setLaundryData(cached.laundryData || []);
+                    setFoodOrders(cached.foodOrders || []);
+                    setPantryOrders([]);
+                    setIsLoading(false);
+                    return;
+                }
+                
                 // Fetch core data first
                 const [roomsData, bookingsData, categoriesData] = await Promise.all([
                     fetchWithRetry(`${BACKEND_URL}/api/rooms/all`),
@@ -292,22 +308,40 @@ const EasyDashboard = () => {
                     fetchWithRetry(`${BACKEND_URL}/api/categories/all`)
                 ]);
 
-                setRooms(Array.isArray(roomsData) ? roomsData : []);
-                setBookings(Array.isArray(bookingsData) ? bookingsData : []);
-                setCategories(Array.isArray(categoriesData) ? categoriesData : []);
+                const rooms = Array.isArray(roomsData) ? roomsData : [];
+                const bookings = Array.isArray(bookingsData) ? bookingsData : [];
+                const categories = Array.isArray(categoriesData) ? categoriesData : [];
+                
+                setRooms(rooms);
+                setBookings(bookings);
+                setCategories(categories);
 
                 // Fetch optional data separately to avoid blocking
+                let laundryData = [];
+                let foodOrders = [];
+                
                 try {
-                    const laundryData = await fetchWithRetry(`${BACKEND_URL}/api/laundry/all`);
-                    setLaundryData(Array.isArray(laundryData) ? laundryData : laundryData?.data || []);
+                    const laundryRes = await fetchWithRetry(`${BACKEND_URL}/api/laundry/all`);
+                    laundryData = Array.isArray(laundryRes) ? laundryRes : laundryRes?.data || [];
+                    setLaundryData(laundryData);
                 } catch { setLaundryData([]); }
 
                 try {
-                    const foodOrdersData = await fetchWithRetry(`${BACKEND_URL}/api/restaurant-orders/all`);
-                    setFoodOrders(Array.isArray(foodOrdersData) ? foodOrdersData : []);
+                    const foodOrdersRes = await fetchWithRetry(`${BACKEND_URL}/api/restaurant-orders/all`);
+                    foodOrders = Array.isArray(foodOrdersRes) ? foodOrdersRes : [];
+                    setFoodOrders(foodOrders);
                 } catch { setFoodOrders([]); }
 
-                setPantryOrders([]); // Skip pantry orders as endpoint doesn't exist
+                setPantryOrders([]);
+                
+                // Cache all data
+                sessionCache.set(cacheKey, {
+                    rooms,
+                    bookings,
+                    categories,
+                    laundryData,
+                    foodOrders
+                });
 
             } catch (err) {
                 setError("Failed to load dashboard data. Please check the backend connection.");

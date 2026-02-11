@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAppContext } from '../context/AppContext';
+import { sessionCache } from '../utils/sessionCache';
 
 // Utility function to format dates from MongoDB
 const formatDate = (dateValue) => {
@@ -49,10 +50,30 @@ export const useBookingList = () => {
 
     try {
       const token = getAuthToken();
+      
+      // Check cache first
+      const cacheKey = 'bookings-list';
+      const cached = sessionCache.get(cacheKey);
+      
+      if (cached) {
+        const bookingsData = cached.bookings || cached;
+        setRooms(cached.rooms || []);
+        setCategories(cached.categories || []);
+        
+        const bookingsArray = Array.isArray(bookingsData) ? bookingsData : bookingsData.bookings || [];
+        const mappedBookings = mapBookings(bookingsArray, cached.rooms || [], cached.categories || []);
+        setBookings(mappedBookings);
+        setLoading(false);
+        return;
+      }
+      
       // Single API call to get all data
       const response = await axios.get("/api/bookings/all", { 
         headers: { Authorization: `Bearer ${token}` } 
       });
+      
+      // Cache the response
+      sessionCache.set(cacheKey, response.data);
       
       // Handle both old and new response formats
       let bookingsData, roomsData, categoriesData;
@@ -73,67 +94,71 @@ export const useBookingList = () => {
       setCategories(categoriesData);
       
       const bookingsArray = Array.isArray(bookingsData) ? bookingsData : bookingsData.bookings || [];
-
-      const mappedBookings = bookingsArray.map((b) => {
-        const room = roomsData.find(r => r.room_number == b.roomNumber || r.roomNumber == b.roomNumber);
-        const category = categoriesData.find(c => 
-          c._id == b.categoryId || 
-          c.id == b.categoryId ||
-          c._id == b.categoryId?._id || 
-          c.id == b.categoryId?._id
-        ) || (room ? categoriesData.find(c => 
-          c._id == room.categoryId || 
-          c.id == room.categoryId || 
-          c._id == room.category?._id || 
-          c.id == room.category?._id
-        ) : null);
-        
-        let extraBedRooms = [];
-        if (b.extraBedRooms && Array.isArray(b.extraBedRooms)) {
-          extraBedRooms = b.extraBedRooms;
-        } else {
-          const roomNumbers = b.roomNumber ? b.roomNumber.split(',').map(r => r.trim()) : [];
-          extraBedRooms = roomNumbers.filter(roomNum => {
-            const roomData = roomsData.find(r => 
-              String(r.room_number) === String(roomNum) || 
-              String(r.roomNumber) === String(roomNum)
-            );
-            return roomData?.extra_bed === true;
-          });
-        }
-        
-        return {
-          id: b._id || "N/A",
-          grcNo: b.grcNo || "N/A",
-          name: b.name || "N/A",
-          mobileNo: b.mobileNo || "N/A",
-          roomNumber: b.roomNumber || "N/A",
-          category: category?.name || category?.categoryName || b.categoryId?.name || "N/A",
-          checkIn: b.checkInDate ? formatDate(b.checkInDate) : "N/A",
-          checkOut: b.checkOutDate ? formatDate(b.checkOutDate) : "N/A",
-          status: b.status || "N/A",
-          paymentStatus: b.paymentStatus || "Pending",
-          vip: b.vip || false,
-          extraBed: b.extraBed || extraBedRooms.length > 0,
-          extraBedRooms: extraBedRooms,
-          _raw: b,
-        };
-      });
-
-      // Sort bookings by creation date (latest first)
-      const sortedBookings = mappedBookings.sort((a, b) => {
-        const dateA = new Date(a._raw.createdAt || a._raw.bookingDate || 0);
-        const dateB = new Date(b._raw.createdAt || b._raw.bookingDate || 0);
-        return dateB - dateA;
-      });
-      
-      setBookings(sortedBookings);
+      const mappedBookings = mapBookings(bookingsArray, roomsData, categoriesData);
+      setBookings(mappedBookings);
     } catch (err) {
       setError(err.message);
       console.error("Error fetching data:", err);
     } finally {
       setLoading(false);
     }
+  };
+
+  const mapBookings = (bookingsArray, roomsData, categoriesData) => {
+    const mappedBookings = bookingsArray.map((b) => {
+      const room = roomsData.find(r => r.room_number == b.roomNumber || r.roomNumber == b.roomNumber);
+      const category = categoriesData.find(c => 
+        c._id == b.categoryId || 
+        c.id == b.categoryId ||
+        c._id == b.categoryId?._id || 
+        c.id == b.categoryId?._id
+      ) || (room ? categoriesData.find(c => 
+        c._id == room.categoryId || 
+        c.id == room.categoryId || 
+        c._id == room.category?._id || 
+        c.id == room.category?._id
+      ) : null);
+      
+      let extraBedRooms = [];
+      if (b.extraBedRooms && Array.isArray(b.extraBedRooms)) {
+        extraBedRooms = b.extraBedRooms;
+      } else {
+        const roomNumbers = b.roomNumber ? b.roomNumber.split(',').map(r => r.trim()) : [];
+        extraBedRooms = roomNumbers.filter(roomNum => {
+          const roomData = roomsData.find(r => 
+            String(r.room_number) === String(roomNum) || 
+            String(r.roomNumber) === String(roomNum)
+          );
+          return roomData?.extra_bed === true;
+        });
+      }
+      
+      return {
+        id: b._id || "N/A",
+        grcNo: b.grcNo || "N/A",
+        name: b.name || "N/A",
+        mobileNo: b.mobileNo || "N/A",
+        roomNumber: b.roomNumber || "N/A",
+        category: category?.name || category?.categoryName || b.categoryId?.name || "N/A",
+        checkIn: b.checkInDate ? formatDate(b.checkInDate) : "N/A",
+        checkOut: b.checkOutDate ? formatDate(b.checkOutDate) : "N/A",
+        status: b.status || "N/A",
+        paymentStatus: b.paymentStatus || "Pending",
+        vip: b.vip || false,
+        extraBed: b.extraBed || extraBedRooms.length > 0,
+        extraBedRooms: extraBedRooms,
+        _raw: b,
+      };
+    });
+
+    // Sort bookings by creation date (latest first)
+    const sortedBookings = mappedBookings.sort((a, b) => {
+      const dateA = new Date(a._raw.createdAt || a._raw.bookingDate || 0);
+      const dateB = new Date(b._raw.createdAt || b._raw.bookingDate || 0);
+      return dateB - dateA;
+    });
+    
+    return sortedBookings;
   };
 
   const updatePaymentStatus = async (bookingId, newPaymentStatus) => {
@@ -154,6 +179,9 @@ export const useBookingList = () => {
       await axios.put(`/api/bookings/update/${bookingId}`, updateData, {
         headers: { Authorization: `Bearer ${token}` }
       });
+
+      // Invalidate cache
+      sessionCache.invalidatePattern('bookings');
 
       setBookings((prev) =>
         prev.map((b) =>
@@ -186,7 +214,8 @@ export const useBookingList = () => {
         headers: { Authorization: `Bearer ${token}` }
       });
 
-      // Refresh data to ensure all related updates are reflected
+      // Invalidate cache and refresh data
+      sessionCache.invalidatePattern('bookings');
       await fetchData();
       setError(null);
     } catch (error) {
@@ -204,6 +233,10 @@ export const useBookingList = () => {
       await axios.delete(`/api/bookings/delete/${bookingId}`, {
         headers: { Authorization: `Bearer ${token}` }
       });
+      
+      // Invalidate cache
+      sessionCache.invalidatePattern('bookings');
+      
       setBookings(prev => prev.filter(b => b.id !== bookingId));
       setError(null);
     } catch (err) {

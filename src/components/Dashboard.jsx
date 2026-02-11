@@ -17,14 +17,11 @@ import {
 import { useAppContext } from "../context/AppContext";
 import { useAuth } from "../context/AuthContext";
 import { useNavigate } from "react-router-dom";
+import { sessionCache } from "../utils/sessionCache";
 
 // Lazy load heavy components
 const BookingCalendar = React.lazy(() => import("./BookingCalendar"));
 const DashboardLoader = React.lazy(() => import("./DashboardLoader"));
-
-// Cache for API responses
-const apiCache = new Map();
-const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
 
 // Add CSS animations
 const styles = `
@@ -222,10 +219,10 @@ const Dashboard = () => {
         url += `&startDate=${startDate}&endDate=${endDate}`;
       }
       
-      const cacheKey = `dashboard-${url}`;
-      const cached = apiCache.get(cacheKey);
-      if (cached && Date.now() - cached.timestamp < CACHE_DURATION) {
-        setDashboardStats(cached.data.stats);
+      const cacheKey = `dashboard-${filter}-${startDate}-${endDate}`;
+      const cached = sessionCache.get(cacheKey);
+      if (cached) {
+        setDashboardStats(cached.stats);
         return;
       }
       
@@ -236,7 +233,7 @@ const Dashboard = () => {
       console.log('Dashboard API Response:', data);
       
       if (data.success) {
-        apiCache.set(cacheKey, { data, timestamp: Date.now() });
+        sessionCache.set(cacheKey, data);
         setDashboardStats(data.stats);
       } else {
         console.log('API returned success: false');
@@ -252,14 +249,22 @@ const Dashboard = () => {
       const token = localStorage.getItem("token");
       const headers = { Authorization: `Bearer ${token}` };
       
+      const cacheKey = 'bookings-rooms-all';
+      const cached = sessionCache.get(cacheKey);
+      
+      if (cached) {
+        setBookings(Array.isArray(cached.bookings) ? cached.bookings : []);
+        setRooms(Array.isArray(cached.rooms) ? cached.rooms : []);
+        return;
+      }
+      
       const response = await axios.get("/api/bookings/all", { headers });
       
-      if (response.data.bookings) {
-        setBookings(Array.isArray(response.data.bookings) ? response.data.bookings : []);
-        setRooms(Array.isArray(response.data.rooms) ? response.data.rooms : []);
-      } else {
-        setBookings(Array.isArray(response.data) ? response.data : []);
-      }
+      const data = response.data.bookings ? response.data : { bookings: response.data, rooms: [] };
+      sessionCache.set(cacheKey, data);
+      
+      setBookings(Array.isArray(data.bookings) ? data.bookings : []);
+      setRooms(Array.isArray(data.rooms) ? data.rooms : []);
     } catch (error) {
       console.error('Fetch bookings/rooms error:', error);
     }
@@ -281,10 +286,10 @@ const Dashboard = () => {
     try {
       let data = [];
       const cacheKey = `service-${service}`;
-      const cached = apiCache.get(cacheKey);
+      const cached = sessionCache.get(cacheKey);
       
-      if (cached && Date.now() - cached.timestamp < CACHE_DURATION) {
-        setAllServiceData(prev => ({ ...prev, [service]: cached.data }));
+      if (cached) {
+        setAllServiceData(prev => ({ ...prev, [service]: cached }));
         return;
       }
       
@@ -292,13 +297,13 @@ const Dashboard = () => {
         const res = await axios.get("/api/restaurant-orders/all", { headers });
         data = Array.isArray(res.data) ? res.data : res.data?.restaurant || [];
         console.log('Restaurant data:', data);
-        apiCache.set(cacheKey, { data, timestamp: Date.now() });
+        sessionCache.set(cacheKey, data);
         setAllServiceData(prev => ({ ...prev, restaurant: data }));
       } else if (service === 'laundry') {
         const res = await axios.get("/api/laundry/all", { headers });
         data = Array.isArray(res.data) ? res.data : res.data?.laundry || [];
         console.log('Laundry data:', data);
-        apiCache.set(cacheKey, { data, timestamp: Date.now() });
+        sessionCache.set(cacheKey, data);
         setAllServiceData(prev => ({ ...prev, laundry: data }));
       }
     } catch (error) {
@@ -504,7 +509,7 @@ const Dashboard = () => {
   useEffect(() => {
     const timeoutId = setTimeout(() => {
       // Clear cache when filter changes
-      apiCache.clear();
+      sessionCache.invalidatePattern('dashboard');
       
       if (timeFrame === 'range' && startDate && endDate) {
         fetchDashboardStats(timeFrame, startDate, endDate);

@@ -3,6 +3,7 @@ import { useAppContext } from '../../context/AppContext';
 import { useNavigate } from 'react-router-dom';
 import { showToast } from '../../utils/toaster';
 import { toast } from 'react-hot-toast';
+import { sessionCache } from '../../utils/sessionCache';
 
 const CheckoutPage = () => {
   const { axios } = useAppContext();
@@ -178,7 +179,6 @@ const CheckoutPage = () => {
       return;
     }
     
-    // Validate that checkoutData has a valid _id
     if (!checkoutData._id) {
       showToast.error('Invalid checkout data. Please refresh and try again.');
       return;
@@ -187,7 +187,6 @@ const CheckoutPage = () => {
     try {
       const token = localStorage.getItem('token');
       
-      // Process payment using the correct checkout ID
       await axios.put(`${import.meta.env.VITE_API_BASE_URL}/api/checkout/${checkoutData._id}/payment`, {
         status: 'Completed',
         paidAmount: parseFloat(paymentAmount)
@@ -195,7 +194,6 @@ const CheckoutPage = () => {
         headers: { Authorization: `Bearer ${token}` }
       });
       
-      // Update local checkout data status immediately
       setCheckoutData(prev => ({
         ...prev,
         status: 'paid'
@@ -207,8 +205,10 @@ const CheckoutPage = () => {
       setShowPaymentForm(false);
       setPaymentAmount('');
       
-      // Refresh bookings to show updated status
+      // Invalidate cache and refresh
+      sessionCache.invalidatePattern('bookings');
       fetchBookings();
+      fetchRooms();
       
     } catch (error) {
       console.error('Error processing payment:', error);

@@ -4,6 +4,7 @@ import { showToast } from '../../utils/toaster';
 import { useAuth } from '../../context/AuthContext';
 import { validateEmail, validatePhone, validateRequired, validatePositiveNumber, validateDateRange, validateGST, validatePAN, validateAadhaar } from '../../utils/validation';
 import BackButton from '../common/BackButton';
+import { sessionCache } from '../../utils/sessionCache';
  
 // Apply golden theme
 const themeStyles = `
@@ -1441,6 +1442,9 @@ const App = () => {
       };
       
       const response = await axios.post(`${BASE_URL}/api/bookings/book`, cleanFormData, { headers });
+
+      // Invalidate cache to show new booking immediately
+      sessionCache.invalidatePattern('bookings');
 
       // If booking was successful and has an invoice number, show it
       if (response.data?.booked?.[0]?.invoiceNumber) {

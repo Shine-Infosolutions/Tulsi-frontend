@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useAppContext } from '../../context/AppContext';
 import { showToast } from '../../utils/toaster';
+import { sessionCache } from '../../utils/sessionCache';
 
 const HotelCheckout = ({ booking, onClose, onCheckoutComplete }) => {
   const { axios } = useAppContext();
@@ -88,7 +89,6 @@ const HotelCheckout = ({ booking, onClose, onCheckoutComplete }) => {
       return;
     }
 
-    // Validate that checkoutData has a valid _id
     if (!checkoutData || !checkoutData._id) {
       showToast.error('Invalid checkout data. Please refresh and try again.');
       return;
@@ -98,7 +98,6 @@ const HotelCheckout = ({ booking, onClose, onCheckoutComplete }) => {
     try {
       const token = localStorage.getItem('token');
       
-      // Process payment
       await axios.put(`/api/checkout/${checkoutData._id}/payment`, {
         status: 'paid',
         paidAmount: parseFloat(paymentAmount),
@@ -111,7 +110,8 @@ const HotelCheckout = ({ booking, onClose, onCheckoutComplete }) => {
         headers: { Authorization: `Bearer ${token}` }
       });
 
-      // The updatePaymentStatus function will handle booking and room updates automatically
+      // Invalidate cache to force refresh
+      sessionCache.invalidatePattern('bookings');
 
       setStep(3);
       showToast.success('Payment processed successfully!');
@@ -124,6 +124,8 @@ const HotelCheckout = ({ booking, onClose, onCheckoutComplete }) => {
   };
 
   const completeCheckout = () => {
+    // Invalidate cache before closing
+    sessionCache.invalidatePattern('bookings');
     onCheckoutComplete?.();
     onClose();
     showToast.success('Checkout completed successfully!');

@@ -186,6 +186,7 @@ const Dashboard = () => {
   const [endDate, setEndDate] = useState('');
   const [rooms, setRooms] = useState([]);
   const [bookings, setBookings] = useState([]);
+  const [categories, setCategories] = useState([]);
   const [dashboardStats, setDashboardStats] = useState(null);
   const [expandedOrder, setExpandedOrder] = useState(null);
   const [currentPage, setCurrentPage] = useState(1);
@@ -255,16 +256,18 @@ const Dashboard = () => {
       if (cached) {
         setBookings(Array.isArray(cached.bookings) ? cached.bookings : []);
         setRooms(Array.isArray(cached.rooms) ? cached.rooms : []);
+        setCategories(Array.isArray(cached.categories) ? cached.categories : []);
         return;
       }
       
       const response = await axios.get("/api/bookings/all", { headers });
       
-      const data = response.data.bookings ? response.data : { bookings: response.data, rooms: [] };
+      const data = response.data.bookings ? response.data : { bookings: response.data, rooms: [], categories: [] };
       sessionCache.set(cacheKey, data);
       
       setBookings(Array.isArray(data.bookings) ? data.bookings : []);
       setRooms(Array.isArray(data.rooms) ? data.rooms : []);
+      setCategories(Array.isArray(response.data.categories) ? response.data.categories : []);
     } catch (error) {
       console.error('Fetch bookings/rooms error:', error);
     }
@@ -524,27 +527,34 @@ const Dashboard = () => {
 
 
   const roomCategories = useMemo(() => {
-    const categories = {};
+    const categoriesMap = {};
     
     rooms.forEach(room => {
-      // Get category name from populated categoryId or fallback
       let categoryName = 'Standard';
       if (room.categoryId) {
         if (typeof room.categoryId === 'object' && room.categoryId.name) {
           categoryName = room.categoryId.name;
         } else if (typeof room.categoryId === 'string') {
-          categoryName = room.categoryId;
+          const category = categories.find(cat => 
+            cat._id === room.categoryId || 
+            cat._id.toString() === room.categoryId.toString()
+          );
+          categoryName = category ? category.name : room.categoryId;
         }
       } else if (room.category) {
         if (typeof room.category === 'object' && room.category.name) {
           categoryName = room.category.name;
         } else if (typeof room.category === 'string') {
-          categoryName = room.category;
+          const category = categories.find(cat => 
+            cat._id === room.category || 
+            cat._id.toString() === room.category.toString()
+          );
+          categoryName = category ? category.name : room.category;
         }
       }
       
-      if (!categories[categoryName]) {
-        categories[categoryName] = {
+      if (!categoriesMap[categoryName]) {
+        categoriesMap[categoryName] = {
           total: 0,
           available: 0,
           booked: 0,
@@ -554,8 +564,8 @@ const Dashboard = () => {
         };
       }
       
-      categories[categoryName].total++;
-      categories[categoryName].rooms.push({
+      categoriesMap[categoryName].total++;
+      categoriesMap[categoryName].rooms.push({
         number: room.room_number || room.roomNumber,
         status: room.status,
         price: room.price
@@ -568,26 +578,26 @@ const Dashboard = () => {
       );
       
       if (activeBooking) {
-        categories[categoryName].booked++;
+        categoriesMap[categoryName].booked++;
       } else {
         switch (room.status) {
           case 'available':
-            categories[categoryName].available++;
+            categoriesMap[categoryName].available++;
             break;
           case 'reserved':
-            categories[categoryName].reserved++;
+            categoriesMap[categoryName].reserved++;
             break;
           case 'maintenance':
-            categories[categoryName].maintenance++;
+            categoriesMap[categoryName].maintenance++;
             break;
           default:
-            categories[categoryName].available++;
+            categoriesMap[categoryName].available++;
         }
       }
     });
     
-    return categories;
-  }, [rooms, bookings]);
+    return categoriesMap;
+  }, [rooms, bookings, categories]);
 
   const toggleCard = (cardId) => {
     const newActiveCard = activeCard === cardId ? null : cardId;

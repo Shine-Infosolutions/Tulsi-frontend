@@ -13,6 +13,7 @@ import {
   AlertTriangle,
   LogOut,
   Download,
+  Loader2,
 } from "lucide-react";
 import { useAppContext } from "../context/AppContext";
 import { useAuth } from "../context/AuthContext";
@@ -203,6 +204,7 @@ const Dashboard = () => {
     reservations: []
   });
   const [loading, setLoading] = useState(true);
+  const [cardLoading, setCardLoading] = useState(false);
   const handleCalendarClick = () => {
     setShowCalendar(true);
   };
@@ -215,6 +217,7 @@ const Dashboard = () => {
 
   const fetchDashboardStats = useCallback(async (filter = 'today', startDate = null, endDate = null) => {
     try {
+      setCardLoading(true);
       let url = `/api/dashboard/stats?filter=${filter}`;
       if (filter === 'range' && startDate && endDate) {
         url += `&startDate=${startDate}&endDate=${endDate}`;
@@ -224,6 +227,7 @@ const Dashboard = () => {
       const cached = sessionCache.get(cacheKey);
       if (cached) {
         setDashboardStats(cached.stats);
+        setCardLoading(false);
         return;
       }
       
@@ -242,6 +246,8 @@ const Dashboard = () => {
     } catch (error) {
       console.log('Dashboard Stats API Error:', error);
       setDashboardStats(null);
+    } finally {
+      setCardLoading(false);
     }
   }, [axios]);
 
@@ -460,7 +466,7 @@ const Dashboard = () => {
       },
       {
         id: "restaurant",
-        title: "Restaurant Orders",
+        title: "In Room Dine",
         value: (dashboardStats?.restaurantOrders || 0).toString(),
         icon: "Users",
         color: "bg-orange-500",
@@ -959,10 +965,44 @@ const Dashboard = () => {
           </div>
         );
       case 'restaurant':
+        const getFilteredRestaurantOrders = () => {
+          const now = new Date();
+          return (allServiceData.restaurant || []).filter(order => {
+            const orderDate = new Date(order.createdAt);
+            
+            switch (timeFrame) {
+              case 'today':
+                const today = new Date();
+                today.setHours(0, 0, 0, 0);
+                const tomorrow = new Date(today);
+                tomorrow.setDate(tomorrow.getDate() + 1);
+                return orderDate >= today && orderDate < tomorrow;
+              case 'weekly':
+                const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+                return orderDate >= weekAgo;
+              case 'monthly':
+                return orderDate.getMonth() === now.getMonth() && orderDate.getFullYear() === now.getFullYear();
+              case 'range':
+                if (startDate && endDate) {
+                  const start = new Date(startDate);
+                  start.setHours(0, 0, 0, 0);
+                  const end = new Date(endDate);
+                  end.setHours(23, 59, 59, 999);
+                  return orderDate >= start && orderDate <= end;
+                }
+                return true;
+              default:
+                return true;
+            }
+          });
+        };
+        
+        const filteredRestaurantOrders = getFilteredRestaurantOrders();
+        
         return (
           <div className="p-4">
             <div className="flex justify-between items-center mb-4">
-              <h3 className="text-lg font-semibold">Restaurant Orders Details</h3>
+              <h3 className="text-lg font-semibold">In Room Dine Orders Details</h3>
               <button 
                 onClick={() => setExpandedOrder(expandedOrder === 'all' ? null : 'all')}
                 className="px-4 py-2 bg-orange-500 text-white rounded hover:bg-orange-600"
@@ -985,7 +1025,7 @@ const Dashboard = () => {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-200">
-                  {allServiceData.restaurant?.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage).map((order, index) => (
+                  {filteredRestaurantOrders.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage).map((order, index) => (
                     <Fragment key={index}>
                       <tr className="hover:bg-gray-50">
                         <td className="px-4 py-2 text-sm">{order._id?.slice(-6) || index + 1}</td>
@@ -1043,7 +1083,7 @@ const Dashboard = () => {
               </table>
               <Pagination 
                 currentPage={currentPage}
-                totalItems={allServiceData.restaurant?.length || 0}
+                totalItems={filteredRestaurantOrders.length}
                 itemsPerPage={itemsPerPage}
                 onPageChange={setCurrentPage}
               />
@@ -1215,55 +1255,43 @@ const Dashboard = () => {
       </div>
       {/* Summary Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4 mb-6">
-        {dashboardCards.length === 0 ? (
-          // Skeleton loading for cards
-          Array.from({length: 8}).map((_, index) => (
-            <div key={index} className="bg-white rounded-lg shadow-md overflow-hidden animate-pulse">
-              <div className="p-4">
-                <div className="flex justify-between items-center mb-2">
-                  <div className="w-10 h-10 bg-gray-300 rounded-lg"></div>
-                  <div className="w-8 h-4 bg-gray-200 rounded"></div>
-                </div>
-                <div className="h-4 bg-gray-200 rounded mb-2"></div>
-                <div className="h-8 bg-gray-300 rounded"></div>
-              </div>
-              <div className="h-1 bg-gray-200"></div>
-            </div>
-          ))
-        ) : (
-          dashboardCards.map((card, index) => {
-            const IconComponent = getIcon(card.icon);
-            return (
-              <div
-                key={card.id}
-                className={`bg-white rounded-lg shadow-md overflow-hidden transition-all duration-300 animate-fadeInUp ${
-                  activeCard === card.id
-                    ? "ring-2 ring-red-500"
-                    : "hover:shadow-lg"
-                }`}
-                style={{animationDelay: `${Math.min((index + 2) * 100, 600)}ms`}}
-                onClick={() => toggleCard(card.id)}
-              >
-                <div className="p-4 cursor-pointer">
-                  <div className="flex justify-between items-center mb-2">
-                    <div className={`p-2 rounded-lg ${card.color} text-white`}>
-                      <IconComponent className="w-5 h-5" />
-                    </div>
+        {dashboardCards.map((card, index) => {
+          const IconComponent = getIcon(card.icon);
+          return (
+            <div
+              key={card.id}
+              className={`bg-white rounded-lg shadow-md overflow-hidden transition-all duration-300 animate-fadeInUp ${
+                activeCard === card.id
+                  ? "ring-2 ring-red-500"
+                  : "hover:shadow-lg"
+              }`}
+              style={{animationDelay: `${Math.min((index + 2) * 100, 600)}ms`}}
+              onClick={() => toggleCard(card.id)}
+            >
+              <div className="p-4 cursor-pointer relative">
+                {cardLoading && (
+                  <div className="absolute inset-0 bg-white/80 flex items-center justify-center rounded-lg">
+                    <Loader2 className="w-6 h-6 text-primary animate-spin" />
                   </div>
-                  <h3 className="text-sm text-text/70">{card.title}</h3>
-                  <p className="text-2xl font-bold text-[#1f2937]">
-                    {card.value}
-                  </p>
+                )}
+                <div className="flex justify-between items-center mb-2">
+                  <div className={`p-2 rounded-lg ${card.color} text-white`}>
+                    <IconComponent className="w-5 h-5" />
+                  </div>
                 </div>
-                <div
-                  className={`h-1 ${
-                    activeCard === card.id ? "bg-red-500" : card.color
-                  }`}
-                ></div>
+                <h3 className="text-sm text-text/70">{card.title}</h3>
+                <p className="text-2xl font-bold text-[#1f2937]">
+                  {card.value}
+                </p>
               </div>
-            );
-          })
-        )}
+              <div
+                className={`h-1 ${
+                  activeCard === card.id ? "bg-red-500" : card.color
+                }`}
+              ></div>
+            </div>
+          );
+        })}
       </div>
       {/* Detail Section */}
       {activeCard && (

@@ -60,6 +60,7 @@ import LaundryCategories from './components/Laundry/LaundryCategories';
 import LossReports from './components/Laundry/LossReports';
 import VendorManagement from './components/Vendor/VendorManagement';
 import Housekeeping from './components/Housekeeping/Housekeeping';
+import CRM from './components/CRM/CRM';
 
 import './App.css'
 
@@ -331,6 +332,13 @@ function App() {
             <Route path="night-audit-report" element={
               <PrivateRoute requiredRoles={['ADMIN', 'GM', 'FRONT DESK', 'ACCOUNTS']}>
                 <NightAuditReport />
+              </PrivateRoute>
+            } />
+
+            {/* CRM Routes */}
+            <Route path="crm" element={
+              <PrivateRoute requiredRoles={['ADMIN', 'GM', 'FRONT DESK']}>
+                <CRM />
               </PrivateRoute>
             } />
             

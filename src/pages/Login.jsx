@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import tulsiLogo from '../assets/Tulsi Resort logo.png';
+import { motion } from 'framer-motion';
 
 const Login = () => {
   const [credentials, setCredentials] = useState({ email: '', password: '' });
@@ -31,19 +32,37 @@ const Login = () => {
   const month = currentDate.toLocaleDateString('en-US', { month: 'long' });
   const year = currentDate.getFullYear();
 
+  const formVariants = {
+    hidden: { opacity: 0, x: -60 },
+    visible: { opacity: 1, x: 0, transition: { duration: 0.6, ease: 'easeOut' } },
+  };
+
+  const itemVariants = {
+    hidden: { opacity: 0, y: 20 },
+    visible: (i) => ({ opacity: 1, y: 0, transition: { delay: i * 0.1 + 0.4, duration: 0.4 } }),
+  };
+
+  const rightVariants = {
+    hidden: { opacity: 0, x: 60 },
+    visible: { opacity: 1, x: 0, transition: { duration: 0.6, ease: 'easeOut' } },
+  };
+
   return (
     <div className="min-h-screen flex">
       <div className="flex w-full">
         {/* Left Side - Login Form */}
-        <div className="w-1/2 p-12 bg-background min-h-screen flex flex-col justify-center">
-
-            
+        <motion.div
+          className="w-1/2 p-12 bg-background min-h-screen flex flex-col justify-center"
+          variants={formVariants}
+          initial="hidden"
+          animate="visible"
+        >
             <div className="space-y-6">
-              <div className="text-center">
+              <motion.div className="text-center" custom={0} variants={itemVariants} initial="hidden" animate="visible">
                 <img src={tulsiLogo} alt="Tulsi Resort" className="h-32 w-auto mx-auto mb-4" />
                 <h1 className="text-3xl font-bold text-gray-800 mb-2">Login</h1>
                 <p className="text-gray-500 text-sm">Please use your email and password to login</p>
-              </div>
+              </motion.div>
               
               <form onSubmit={handleSubmit} className="space-y-4">
                 {error && (
@@ -52,7 +71,7 @@ const Login = () => {
                   </div>
                 )}
                 
-                <div className="relative">
+                <motion.div className="relative" custom={1} variants={itemVariants} initial="hidden" animate="visible">
                   <input
                     type="email"
                     placeholder="Email"
@@ -62,9 +81,9 @@ const Login = () => {
                     required
                   />
                   <div className="absolute right-3 top-3 w-4 h-4 bg-accent rounded-full"></div>
-                </div>
+                </motion.div>
                 
-                <div className="relative">
+                <motion.div className="relative" custom={2} variants={itemVariants} initial="hidden" animate="visible">
                   <input
                     type="password"
                     placeholder="Password"
@@ -78,9 +97,9 @@ const Login = () => {
                       <path fillRule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clipRule="evenodd" />
                     </svg>
                   </div>
-                </div>
+                </motion.div>
                 
-                <div className="flex items-center">
+                <motion.div className="flex items-center" custom={3} variants={itemVariants} initial="hidden" animate="visible">
                   <input
                     type="checkbox"
                     id="keepLoggedIn"
@@ -89,25 +108,36 @@ const Login = () => {
                     className="mr-2"
                   />
                   <label htmlFor="keepLoggedIn" className="text-sm text-gray-600">Keep me logged in</label>
-                </div>
+                </motion.div>
                 
-                <button
+                <motion.button
                   type="submit"
                   disabled={loading}
                   className="w-full bg-primary hover:bg-hover text-white font-semibold py-3 px-4 rounded-lg transition-colors duration-200 disabled:opacity-50"
+                  custom={4}
+                  variants={itemVariants}
+                  initial="hidden"
+                  animate="visible"
+                  whileHover={{ scale: 1.02 }}
+                  whileTap={{ scale: 0.98 }}
                 >
                   {loading ? 'LOGGING IN...' : 'LOGIN'}
-                </button>
+                </motion.button>
               </form>
               
-              <div className="text-center">
+              <motion.div className="text-center" custom={5} variants={itemVariants} initial="hidden" animate="visible">
                 <a href="#" className="text-sm text-gray-500 hover:text-gray-700">Trouble Logging in?</a>
-              </div>
+              </motion.div>
             </div>
-          </div>
+        </motion.div>
           
         {/* Right Side - Calendar Design */}
-        <div className="w-1/2 bg-gradient-to-br from-primary via-secondary to-accent relative overflow-hidden min-h-screen">
+        <motion.div
+          className="w-1/2 bg-gradient-to-br from-primary via-secondary to-accent relative overflow-hidden min-h-screen"
+          variants={rightVariants}
+          initial="hidden"
+          animate="visible"
+        >
             {/* Date Display */}
             <div className="absolute top-16 left-16 text-white z-10">
               <div className="text-9xl font-light">{day}th {month},</div>
@@ -144,7 +174,7 @@ const Login = () => {
               {/* Teal circle in top right */}
               <div className="absolute top-20 right-8 w-12 h-12 border-4 border-teal-300 rounded-full"></div>
             </div>
-          </div>
+        </motion.div>
       </div>
     </div>
   );

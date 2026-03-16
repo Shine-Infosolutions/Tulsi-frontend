@@ -31,6 +31,7 @@ import {
   AlertTriangle,
   Tag,
   Sparkles,
+  ContactRound,
 } from "lucide-react";
 import logoImage from "../assets/Tulsi Resort.png";
 
@@ -202,6 +203,11 @@ const Sidebar = () => {
     // Reports - Admin, GM, Front Desk, Accounts
     if (hasRole(['ADMIN', 'GM', 'FRONT DESK', 'ACCOUNTS'])) {
       items.push({ icon: FileText, label: "Night Audit Report", path: "/night-audit-report" });
+    }
+
+    // CRM - Admin, GM, Front Desk
+    if (hasRole(['ADMIN', 'GM', 'FRONT DESK'])) {
+      items.push({ icon: ContactRound, label: "CRM", path: "/crm" });
     }
 
     // Users - Admin only

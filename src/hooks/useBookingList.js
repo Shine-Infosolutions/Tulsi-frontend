@@ -51,21 +51,8 @@ export const useBookingList = () => {
     try {
       const token = getAuthToken();
       
-      // Check cache first
-      const cacheKey = 'bookings-list';
-      const cached = sessionCache.get(cacheKey);
-      
-      if (cached) {
-        const bookingsData = cached.bookings || cached;
-        setRooms(cached.rooms || []);
-        setCategories(cached.categories || []);
-        
-        const bookingsArray = Array.isArray(bookingsData) ? bookingsData : bookingsData.bookings || [];
-        const mappedBookings = mapBookings(bookingsArray, cached.rooms || [], cached.categories || []);
-        setBookings(mappedBookings);
-        setLoading(false);
-        return;
-      }
+      // Always skip cache and fetch fresh data
+      sessionCache.invalidatePattern('bookings');
       
       // Single API call to get all data
       const response = await axios.get("/api/bookings/all", { 
@@ -73,7 +60,7 @@ export const useBookingList = () => {
       });
       
       // Cache the response
-      sessionCache.set(cacheKey, response.data);
+      sessionCache.set('bookings-list', response.data);
       
       // Handle both old and new response formats
       let bookingsData, roomsData, categoriesData;

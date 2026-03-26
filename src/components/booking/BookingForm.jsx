@@ -287,6 +287,7 @@ export const AppProvider = ({ children }) => {
     gender: '',
     address: '',
     city: '',
+    state: '',
     nationality: '',
     mobileNo: '',
     email: '',
@@ -435,7 +436,7 @@ export const AppProvider = ({ children }) => {
       grcNo: '', reservationId: '', categoryId: '', bookingDate: new Date().toISOString().split('T')[0],
       numberOfRooms: 1, isActive: true, checkInDate: '', checkOutDate: '', days: 0,
       timeIn: '12:00', timeOut: '12:00', salutation: 'mr.', name: '', age: '',
-      gender: '', address: '', city: '', nationality: '', mobileNo: '', email: '',
+      gender: '', address: '', city: '', state: '', nationality: '', mobileNo: '', email: '',
       phoneNo: '', birthDate: '', anniversary: '', companyName: '', companyGSTIN: '',
       idProofType: '', idProofNumber: '', idProofImageUrl: '', idProofImageUrl2: '',
       photoUrl: '', roomNumber: '', planPackage: '', noOfAdults: 1, noOfChildren: 0,
@@ -955,6 +956,7 @@ const App = () => {
           gender: fetchedData.gender || '',
           address: fetchedData.address || '',
           city: fetchedData.city || '',
+          state: fetchedData.state || '',
           nationality: fetchedData.nationality || '',
           mobileNo: fetchedData.mobileNo || '',
           email: fetchedData.email || '',
@@ -1990,6 +1992,16 @@ const App = () => {
                 name="city"
                 value={formData.city}
                 onChange={handleChange}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="state">State</Label>
+              <Input
+                id="state"
+                name="state"
+                value={formData.state}
+                onChange={handleChange}
+                placeholder="e.g. Maharashtra"
               />
             </div>
             <div className="space-y-2">

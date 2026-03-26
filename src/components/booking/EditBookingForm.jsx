@@ -6,6 +6,7 @@ import { showToast } from '../../utils/toaster';
 import RoomServiceOrders from './RoomServiceOrders';
 import RestaurantOrders from './RestaurantOrders';
 import BackButton from '../common/BackButton';
+import { sessionCache } from '../../utils/sessionCache';
 import {
   FaUser,
   FaPhone,
@@ -205,6 +206,7 @@ const EditBookingForm = () => {
     gender: '',
     address: '',
     city: '',
+    state: '',
     nationality: '',
     mobileNo: '',
     email: '',
@@ -322,6 +324,7 @@ const EditBookingForm = () => {
         gender: editBooking.gender || '',
         address: editBooking.address || '',
         city: editBooking.city || '',
+        state: editBooking.state || '',
         nationality: editBooking.nationality || '',
         mobileNo: editBooking.mobileNo || '',
         email: editBooking.email || '',
@@ -936,6 +939,8 @@ const EditBookingForm = () => {
       const response = await axios.put(`/api/bookings/update/${editBooking._id}`, updateData);
       console.log('Update response:', response.data);
       showToast.success('Booking updated successfully!');
+      // Invalidate cache so booking list shows fresh data
+      sessionCache.invalidatePattern('bookings');
       // Navigate immediately after showing toast
       setTimeout(() => {
         navigate('/booking');
@@ -973,6 +978,11 @@ const EditBookingForm = () => {
           </div>
         </div>
       </header>
+      {formData.status === 'Checked Out' && (
+        <div className="bg-amber-50 border-b border-amber-200 px-4 py-2 flex items-center gap-2">
+          <span className="text-amber-600 text-sm font-medium">⚠️ This booking is already checked out. You can still correct guest info, payment details or notes — room/date changes won't affect availability.</span>
+        </div>
+      )}
       <main className="container mx-auto px-4 py-6">
         <div className="bg-white rounded-xl shadow-md overflow-hidden">
           <div className="p-6 space-y-8">
@@ -1327,6 +1337,16 @@ const EditBookingForm = () => {
                       name="city"
                       value={formData.city}
                       onChange={handleChange}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="state">State</Label>
+                    <Input
+                      id="state"
+                      name="state"
+                      value={formData.state}
+                      onChange={handleChange}
+                      placeholder="e.g. Maharashtra"
                     />
                   </div>
                   <div className="space-y-2">

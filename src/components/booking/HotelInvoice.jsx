@@ -1565,7 +1565,7 @@ export default function Invoice() {
               <div className="contact-info flex flex-col sm:flex-row items-center space-y-2 sm:space-y-0 sm:space-x-4">
                 <div className="text-xs flex items-center space-x-2">
                     <RiPhoneFill className="text-lg text-yellow-600" />
-                    <span>+91-9621051727</span>
+                    <span>+91-7607609668</span>
                 </div>
                 <div className="text-xs flex items-center space-x-2">
                     <RiMailFill className="text-lg text-yellow-600" />
